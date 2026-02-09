@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>A股上市日期查询 - 必盈API版</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lunar-javascript@1.2.0/lunar.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+SC:wght@300;400;500;700&family=Noto+Serif+SC:wght@500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', 'Noto Sans SC', sans-serif;
+            background: #0f172a;
+            overflow-x: hidden;
+        }
+        
+        .bg-gradient-animate {
+            background: linear-gradient(-45deg, #0f172a, #1e293b, #334155, #0f172a);
+            background-size: 400% 400%;
+            animation: gradientBG 15s ease infinite;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -2;
+        }
+        
+        @keyframes gradientBG {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+        
+        .particles {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -1;
+            opacity: 0.3;
+        }
+        
+        .particle {
+            position: absolute;
+            width: 2px;
+            height: 2px;
+            background: rgba(148, 163, 184, 0.5);
+            border-radius: 50%;
+            animation: float 20s infinite linear;
+        }
+        
+        @keyframes float {
+            from { transform: translateY(100vh) translateX(0); }
+            to { transform: translateY(-10vh) translateX(100px); }
+        }
+        
+        .glass-panel {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+        
+        .glow-input:focus {
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.5);
+            border-color: #3b82f6;
+        }
+        
+        .btn-shine {
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .btn-shine::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transition: left 0.5s;
+        }
+        
+        .btn-shine:hover::before {
+            left: 100%;
+        }
+        
+        .loader {
+            border: 3px solid rgba(59, 130, 246, 0.3);
+            border-radius: 50%;
+            border-top: 3px solid #3b82f6;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .result-card {
+            animation: slideUp 0.5s ease-out;
+        }
+        
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .lunar-text {
+            font-family: 'Noto Serif SC', serif;
+            text-shadow: 0 0 20px rgba(234, 179, 8, 0.3);
+        }
+        
+        .shake {
+            animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
+        }
+        
+        @keyframes shake {
+            10%, 90% { transform: translate3d(-1px, 0, 0); }
+            20%, 80% { transform: translate3d(2px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+            40%, 60% { transform: translate3d(4px, 0, 0); }
+        }
+        
+        .divider-gradient {
+            height: 1px;
+            background: linear-gradient(90deg, transparent, rgba(148, 163, 184, 0.3), transparent);
+        }
+        
+        .api-status {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+            backdrop-filter: blur(10px);
+            z-index: 50;
+        }
+        
+        .api-status.active {
+            background: rgba(16, 185, 129, 0.2);
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            color: #34d399;
+        }
+        
+        .api-status.error {
+            background: rgba(239, 68, 68, 0.2);
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            color: #f87171;
+        }
+    </style>
+</head>
+<body class="text-gray-100 min-h-screen flex items-center justify-center p-4">
+
+    <div class="bg-gradient-animate"></div>
+    <div class="particles" id="particles"></div>
+    
+    <!-- API状态指示器 -->
+    <div id="apiStatus" class="api-status active">
+        <span class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            必盈API已连接
+        </span>
+    </div>
+
+    <div class="w-full max-w-lg">
+        
+        <!-- 标题区域 -->
+        <div class="text-center mb-8">
+            <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-blue-500/20 border border-blue-500/30 mb-4 shadow-lg shadow-blue-500/20">
+                <svg class="w-8 h-8 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                </svg>
+            </div>
+            <h1 class="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-cyan-300">
+                A股上市日期查询
+            </h1>
+            <p class="text-gray-400 mt-2 text-sm">接入必盈API实时数据 · 支持万年历显示</p>
+        </div>
+
+        <!-- 查询面板 -->
+        <div class="glass-panel rounded-3xl p-6 mb-6">
+            <div class="space-y-4">
+                <div class="relative">
+                    <label class="block text-xs font-medium text-gray-400 mb-2 uppercase tracking-wider">股票代码</label>
+                    <div class="relative">
+                        <input 
+                            type="text" 
+                            id="stockCode" 
+                            placeholder="例如: 000001 或 600519" 
+                            maxlength="6"
+                            class="w-full bg-slate-800/50 border border-slate-600 rounded-xl px-4 py-4 text-lg font-mono tracking-widest text-center uppercase placeholder-gray-600 focus:outline-none glow-input transition-all duration-300 text-white"
+                        >
+                        <div class="absolute right-3 top-1/2 transform -translate-y-1/2 text-xs text-gray-500" id="marketTag"></div>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-2 text-center">支持沪股通(60/68/69开头)和深股通(00/30开头)</p>
+                </div>
+
+                <button 
+                    onclick="queryStock()"
+                    id="queryBtn"
+                    class="w-full bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400 text-white font-semibold py-4 rounded-xl transition-all duration-300 transform hover:scale-[1.02] active:scale-[0.98] btn-shine shadow-lg shadow-blue-500/25 flex items-center justify-center gap-2"
+                >
+                    <span id="btnText">查询上市日期</span>
+                    <div id="btnLoader" class="loader hidden"></div>
+                </button>
+                
+                <button 
+                    onclick="toggleDemoMode()"
+                    id="demoBtn"
+                    class="w-full bg-slate-700/50 hover:bg-slate-600/50 text-gray-400 text-sm py-2 rounded-lg transition-colors border border-slate-600/30"
+                >
+                    切换演示模式（无需网络）
+                </button>
+            </div>
+        </div>
+
+        <!-- 结果展示区域 -->
+        <div id="resultArea" class="hidden space-y-4">
+            <!-- 主要信息卡片 -->
+            <div class="glass-panel rounded-3xl p-6 result-card border-l-4 border-l-blue-500">
+                <div class="flex justify-between items-start mb-4">
+                    <div>
+                        <h2 class="text-2xl font-bold text-white mb-1" id="stockName">--</h2>
+                        <p class="text-gray-400 font-mono text-lg" id="fullCode">--</p>
+                    </div>
+                    <div class="px-3 py-1 rounded-full bg-blue-500/20 border border-blue-500/30 text-blue-300 text-xs font-medium" id="marketBadge">
+                        --
+                    </div>
+                </div>
+
+                <div class="divider-gradient my-4"></div>
+
+                <!-- 公历日期 -->
+                <div class="mb-4">
+                    <div class="text-gray-400 text-xs mb-1 uppercase tracking-wider flex items-center gap-1">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                        </svg>
+                        公历上市日期
+                    </div>
+                    <div class="text-2xl font-bold text-cyan-400 font-mono tracking-wider" id="listDate">--</div>
+                    <div class="text-sm text-gray-500 mt-1" id="listDateWeek">--</div>
+                </div>
+
+                <!-- 万年历（干支历） -->
+                <div class="bg-gradient-to-br from-amber-900/20 to-yellow-900/10 rounded-xl p-4 border border-amber-700/30 relative overflow-hidden">
+                    <div class="absolute top-0 right-0 w-20 h-20 bg-amber-500/10 rounded-full blur-2xl -mr-10 -mt-10"></div>
+                    <div class="relative z-10">
+                        <div class="text-amber-400/70 text-xs mb-2 uppercase tracking-wider flex items-center gap-1">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                            </svg>
+                            万年历 · 干支历
+                        </div>
+                        <div class="lunar-text text-3xl font-bold text-amber-300 tracking-widest text-center py-2" id="ganZhiDate">
+                            --年 --月 --日
+                        </div>
+                        <div class="text-center mt-2 text-amber-200/60 text-sm" id="lunarDate">
+                            农历 --
+                        </div>
+                        <div class="flex justify-center gap-4 mt-3 text-xs text-amber-400/50">
+                            <span id="shengXiao">生肖: --</span>
+                            <span>|</span>
+                            <span id="jieQi">节气: --</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 统计信息 -->
+                <div class="grid grid-cols-3 gap-3 mt-4">
+                    <div class="bg-slate-800/30 rounded-xl p-3 border border-slate-700/50 text-center">
+                        <div class="text-gray-400 text-xs mb-1">已上市</div>
+                        <div class="text-lg font-bold text-emerald-400" id="yearsListed">--</div>
+                        <div class="text-xs text-gray-500">年</div>
+                    </div>
+                    <div class="bg-slate-800/30 rounded-xl p-3 border border-slate-700/50 text-center">
+                        <div class="text-gray-400 text-xs mb-1">相当于</div>
+                        <div class="text-lg font-bold text-blue-400" id="monthsListed">--</div>
+                        <div class="text-xs text-gray-500">个月</div>
+                    </div>
+                    <div class="bg-slate-800/30 rounded-xl p-3 border border-slate-700/50 text-center">
+                        <div class="text-gray-400 text-xs mb-1">共</div>
+                        <div class="text-lg font-bold text-purple-400" id="daysListed">--</div>
+                        <div class="text-xs text-gray-500">天</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 原始数据展示（可折叠） -->
+            <div class="glass-panel rounded-2xl p-4 result-card">
+                <details class="group">
+                    <summary class="flex items-center justify-between cursor-pointer list-none">
+                        <div class="flex items-center gap-2 text-xs text-gray-400">
+                            <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                            </svg>
+                            查看原始API数据
+                        </div>
+                        <span class="transition group-open:rotate-180">
+                            <svg fill="none" height="24" shape-rendering="geometricPrecision" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" viewBox="0 0 24 24" width="24"><path d="M6 9l6 6 6-6"></path></svg>
+                        </span>
+                    </summary>
+                    <div class="text-xs text-gray-500 mt-3 overflow-x-auto bg-slate-900/50 p-3 rounded-lg font-mono" id="rawData">
+                        {}
+                    </div>
+                </details>
+            </div>
+        </div>
+
+        <!-- 错误提示 -->
+        <div id="errorArea" class="hidden mt-4 p-4 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-200 text-sm text-center result-card">
+            <div class="flex items-center justify-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                <span id="errorText">查询失败</span>
+            </div>
+            <div class="mt-2 text-xs text-red-300/70" id="errorDetail"></div>
+        </div>
+
+        <!-- 使用说明 -->
+        <div class="mt-8 p-4 rounded-2xl bg-slate-800/30 border border-slate-700/30 text-xs text-gray-500 space-y-2">
+            <div class="flex items-center gap-2 mb-2 text-gray-400 font-semibold">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                使用说明
+            </div>
+            <p>• 已配置Licence：<span class="font-mono text-blue-400">6460****-****-****-****-******DF7E</span></p>
+            <p>• 数据源：必盈API（biyingapi.com）实时股票基础信息</p>
+            <p>• 如遇到CORS限制，请使用演示模式或配置浏览器跨域插件</p>
+        </div>
+    </div>
+
+    <script>
+        // 配置
+        const CONFIG = {
+            licence: '64602374-DAD4-4B84-8FF6-260DC745DF7E',
+            apiBase: 'http://api.biyingapi.com/hsstock/instrument',
+            demoMode: false
+        };
+
+        // 模拟股票数据库（演示模式用）
+        const mockDatabase = {
+            '000001': { name: '平安银行', market: 'SZ', listDate: '1991-04-03' },
+            '000002': { name: '万科A', market: 'SZ', listDate: '1991-01-29' },
+            '000858': { name: '五粮液', market: 'SZ', listDate: '1998-04-27' },
+            '002594': { name: '比亚迪', market: 'SZ', listDate: '2011-06-30' },
+            '300750': { name: '宁德时代', market: 'SZ', listDate: '2018-06-11' },
+            '600000': { name: '浦发银行', market: 'SH', listDate: '1999-11-10' },
+            '600519': { name: '贵州茅台', market: 'SH', listDate: '2001-08-27' },
+            '600036': { name: '招商银行', market: 'SH', listDate: '2002-04-09' },
+            '601318': { name: '中国平安', market: 'SH', listDate: '2007-03-01' },
+            '601888': { name: '中国中免', market: 'SH', listDate: '2009-10-15' },
+            '688981': { name: '中芯国际', market: 'SH', listDate: '2020-07-16' },
+            '688235': { name: '百济神州', market: 'SH', listDate: '2021-12-15' }
+        };
+
+        // 创建背景粒子
+        function createParticles() {
+            const container = document.getElementById('particles');
+            for (let i = 0; i < 50; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'particle';
+                particle.style.left = Math.random() * 100 + '%';
+                particle.style.animationDuration = (Math.random() * 20 + 10) + 's';
+                particle.style.animationDelay = Math.random() * 20 + 's';
+                container.appendChild(particle);
+            }
+        }
+
+        // 判断市场
+        function detectMarket(code) {
+            const prefix = code.substring(0, 2);
+            if (['60', '68', '69'].includes(prefix)) return 'SH';
+            if (['00', '30', '15'].includes(prefix)) return 'SZ';
+            if (['8', '4'].includes(prefix[0])) return 'BJ';
+            return 'SZ';
+        }
+
+        // 切换演示模式
+        function toggleDemoMode() {
+            CONFIG.demoMode = !CONFIG.demoMode;
+            const btn = document.getElementById('demoBtn');
+            const status = document.getElementById('apiStatus');
+            
+            if (CONFIG.demoMode) {
+                btn.textContent = '切换实时API模式';
+                btn.classList.add('bg-amber-600/50', 'text-amber-200');
+                status.className = 'api-status error';
+                status.innerHTML = '<span class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-amber-400"></span>演示模式</span>';
+            } else {
+                btn.textContent = '切换演示模式（无需网络）';
+                btn.classList.remove('bg-amber-600/50', 'text-amber-200');
+                status.className = 'api-status active';
+                status.innerHTML = '<span class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>必盈API已连接</span>';
+            }
+        }
+
+        // 格式化日期
+        function formatDate(dateStr) {
+            const date = new Date(dateStr);
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const weekDays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+            const weekDay = weekDays[date.getDay()];
+            return {
+                full: `${year}-${month}-${day}`,
+                display: `${year}年${month}月${day}日`,
+                weekDay: weekDay,
+                year: year,
+                month: date.getMonth() + 1,
+                day: date.getDate()
+            };
+        }
+
+        // 计算万年历
+        function getLunarCalendar(year, month, day) {
+            try {
+                const solar = Solar.fromYmd(year, month, day);
+                const lunar = solar.getLunar();
+                
+                const yearGanZhi = lunar.getYearInGanZhi();
+                const monthGanZhi = lunar.getMonthInGanZhi();
+                const dayGanZhi = lunar.getDayInGanZhi();
+                
+                const lunarMonth = lunar.getMonthInChinese();
+                const lunarDay = lunar.getDayInChinese();
+                
+                const shengXiao = lunar.getYearShengXiao();
+                const jieQi = lunar.getJieQi();
+                const jieQiName = jieQi ? jieQi.getName() : '无';
+                
+                return {
+                    ganZhi: `${yearGanZhi}年 ${monthGanZhi}月 ${dayGanZhi}日`,
+                    lunar: `农历${lunarMonth}月${lunarDay}`,
+                    shengXiao: shengXiao,
+                    jieQi: jieQiName,
+                    yearGanZhi: yearGanZhi,
+                    monthGanZhi: monthGanZhi,
+                    dayGanZhi: dayGanZhi
+                };
+            } catch (e) {
+                console.error('Lunar calculation error:', e);
+                return {
+                    ganZhi: '计算错误',
+                    lunar: '--',
+                    shengXiao: '--',
+                    jieQi: '--'
+                };
+            }
+        }
+
+        // 计算时间差
+        function calculateDuration(listDate) {
+            const start = new Date(listDate);
+            const now = new Date();
+            const diffTime = now - start;
+            const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+            
+            const years = (diffDays / 365.25).toFixed(1);
+            const months = Math.floor(diffDays / 30.44);
+            const tradeDays = Math.floor(diffDays * 0.7);
+            
+            return {
+                days: diffDays,
+                years: years,
+                months: months,
+                tradeDays: tradeDays
+            };
+        }
+
+        // 调用必盈API
+        async function callBiYingAPI(code, market) {
+            const url = `${CONFIG.apiBase}/${code}.${market}/${CONFIG.licence}`;
+            
+            try {
+                // 使用fetch调用API（注意：浏览器可能有CORS限制）
+                const response = await fetch(url, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                    },
+                    // 如果需要，可以添加mode: 'no-cors'，但这样无法读取响应内容
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                return data;
+            } catch (error) {
+                console.error('API call failed:', error);
+                throw error;
+            }
+        }
+
+        // 使用JSONP方式调用（解决跨域）
+        function callBiYingAPI_JSONP(code, market) {
+            return new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                const callbackName = 'biying_callback_' + Date.now();
+                
+                window[callbackName] = function(data) {
+                    delete window[callbackName];
+                    document.head.removeChild(script);
+                    resolve(data);
+                };
+                
+                // 必盈API可能不支持JSONP，这里仅作为备用方案示例
+                const url = `${CONFIG.apiBase}/${code}.${market}/${CONFIG.licence}?callback=${callbackName}`;
+                script.src = url;
+                script.onerror = () => {
+                    delete window[callbackName];
+                    document.head.removeChild(script);
+                    reject(new Error('JSONP request failed'));
+                };
+                
+                document.head.appendChild(script);
+                
+                // 超时处理
+                setTimeout(() => {
+                    if (window[callbackName]) {
+                        delete window[callbackName];
+                        document.head.removeChild(script);
+                        reject(new Error('JSONP timeout'));
+                    }
+                }, 10000);
+            });
+        }
+
+        // 查询股票
+        async function queryStock() {
+            const codeInput = document.getElementById('stockCode');
+            const code = codeInput.value.trim();
+            
+            if (!code || code.length !== 6 || !/^\d{6}$/.test(code)) {
+                codeInput.classList.add('shake');
+                setTimeout(() => codeInput.classList.remove('shake'), 500);
+                return;
+            }
+
+            const btn = document.getElementById('queryBtn');
+            const btnText = document.getElementById('btnText');
+            const btnLoader = document.getElementById('btnLoader');
+            const resultArea = document.getElementById('resultArea');
+            const errorArea = document.getElementById('errorArea');
+            
+            btn.disabled = true;
+            btnText.textContent = '查询中...';
+            btnLoader.classList.remove('hidden');
+            resultArea.classList.add('hidden');
+            errorArea.classList.add('hidden');
+
+            const market = detectMarket(code);
+            
+            try {
+                let data;
+                
+                if (CONFIG.demoMode) {
+                    // 演示模式：使用本地数据
+                    await new Promise(resolve => setTimeout(resolve, 500));
+                    data = mockDatabase[code];
+                    if (!data) {
+                        // 生成随机演示数据
+                        const randomDate = new Date(1990 + Math.floor(Math.random() * 34), Math.floor(Math.random() * 12), Math.floor(Math.random() * 28) + 1);
+                        data = {
+                            name: `股票${code}（演示）`,
+                            market: market,
+                            listDate: randomDate.toISOString().split('T')[0]
+                        };
+                    }
+                } else {
+                    // 真实API模式
+                    try {
+                        // 尝试直接fetch
+                        const apiData = await callBiYingAPI(code, market);
+                        
+                        // 解析必盈API返回格式
+                        // 假设返回格式：{ n: "股票名称", c: "代码", od: "上市日期", ... }
+                        if (apiData && apiData.n) {
+                            data = {
+                                name: apiData.n,
+                                market: market,
+                                listDate: apiData.od || apiData.listDate, // 根据实际字段调整
+                                raw: apiData // 保存原始数据
+                            };
+                        } else {
+                            throw new Error('Invalid API response format');
+                        }
+                    } catch (apiError) {
+                        console.warn('API call failed, falling back to demo:', apiError);
+                        // API失败时回退到演示数据
+                        data = mockDatabase[code];
+                        if (!data) {
+                            throw new Error('无法获取股票数据，请检查代码是否正确或切换到演示模式');
+                        }
+                        // 显示警告
+                        document.getElementById('apiStatus').className = 'api-status error';
+                        document.getElementById('apiStatus').innerHTML = '<span class="flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-red-400"></span>API受限，使用演示数据</span>';
+                    }
+                }
+                
+                displayResult(code, data);
+                
+            } catch (error) {
+                console.error('Query error:', error);
+                document.getElementById('errorText').textContent = '查询失败';
+                document.getElementById('errorDetail').textContent = error.message || '请检查网络连接或股票代码';
+                errorArea.classList.remove('hidden');
+            }
+
+            btn.disabled = false;
+            btnText.textContent = '查询上市日期';
+            btnLoader.classList.add('hidden');
+        }
+
+        // 显示结果
+        function displayResult(code, data) {
+            const market = data.market || detectMarket(code);
+            const marketName = market === 'SH' ? '上海证券交易所' : market === 'SZ' ? '深圳证券交易所' : '北京证券交易所';
+            const fullCode = code + '.' + market;
+            
+            const dateInfo = formatDate(data.listDate);
+            const duration = calculateDuration(data.listDate);
+            const lunarInfo = getLunarCalendar(dateInfo.year, dateInfo.month, dateInfo.day);
+            
+            document.getElementById('stockName').textContent = data.name;
+            document.getElementById('fullCode').textContent = fullCode;
+            document.getElementById('marketBadge').textContent = marketName;
+            document.getElementById('listDate').textContent = dateInfo.display;
+            document.getElementById('listDateWeek').textContent = dateInfo.weekDay;
+            
+            document.getElementById('ganZhiDate').textContent = lunarInfo.ganZhi;
+            document.getElementById('lunarDate').textContent = lunarInfo.lunar;
+            document.getElementById('shengXiao').textContent = `生肖: ${lunarInfo.shengXiao}`;
+            document.getElementById('jieQi').textContent = `节气: ${lunarInfo.jieQi}`;
+            
+            document.getElementById('yearsListed').textContent = duration.years;
+            document.getElementById('monthsListed').textContent = duration.months;
+            document.getElementById('daysListed').textContent = duration.days;
+            document.getElementById('totalDays').textContent = duration.tradeDays;
+            
+            // 显示原始数据
+            document.getElementById('rawData').textContent = JSON.stringify(data.raw || data, null, 2);
+            
+            document.getElementById('resultArea').classList.remove('hidden');
+        }
+
+        // 回车键查询
+        document.getElementById('stockCode').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') queryStock();
+        });
+
+        // 输入时自动检测市场
+        document.getElementById('stockCode').addEventListener('input', function(e) {
+            const code = e.target.value;
+            const tag = document.getElementById('marketTag');
+            if (code.length >= 2) {
+                const market = detectMarket(code);
+                tag.textContent = market === 'SH' ? '沪' : market === 'SZ' ? '深' : '京';
+            } else {
+                tag.textContent = '';
+            }
+        });
+
+        // 初始化
+        createParticles();
+        document.getElementById('stockCode').focus();
+        
+        // 检查API连通性（可选）
+        console.log('必盈API配置完成，Licence:', CONFIG.licence);
+    </script>
+</body>
+</html>
